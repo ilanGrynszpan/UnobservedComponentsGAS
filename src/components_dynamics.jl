@@ -66,6 +66,25 @@ Checks if there is any seasonality component present in the provided seasonality
 """
 has_seasonality(seasonality::Union{String, Vector{String}}) = any(.!isempty.(seasonality))
 
+function has_HS_seasonality(seasonality::Union{String,Vector{String}})
+    if typeof(seasonality) == String
+        if !isempty(seasonality) && split(seasonality)[1] in ["HS", "Harrison Stevens", "Harrison & Stevens", "Harrison and Stevens"]
+            return true
+        end
+    else
+
+        for i in 1:length(seasonality)
+            if !isempty(seasonality[i]) && split(seasonality[i])[1] in ["HS", "Harrison Stevens", "Harrison & Stevens", "Harrison and Stevens"]
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+has_HS_seasonality(seasonality::Union{String, Vector{String}}, param::Int64) = !isempty(seasonality[param]) && split(seasonality[1])[1] in ["HS", "Harrison Stevens", "Harrison & Stevens", "Harrison and Stevens"]
+
 """
 ## has_AR(ar::Union{Int64, Vector{Int64}, Vector{Missing}, Vector{Union{Int64, Missing}}, Missing, Vector{Vector{Int64}}, Vector{Union{Vector{Int64}, Missing}}})
 
@@ -272,11 +291,13 @@ function add_random_walk_slope!(model::Ml, s::Vector{Fl}, T::Int64, random_walk_
     @variable(model, b[1:T, idx_params])
     @variable(model, κ_RWS[idx_params])
     @variable(model, κ_b[idx_params])
+    @variable(model, Φ[idx_params])
 
-    @constraint(model, [t = 2:T, j in idx_params], b[t, j]   == b[t - 1, j] + κ_b[j] * s[j][t])
+    @constraint(model, [t = 2:T, j in idx_params], b[t, j]   == Φ[j] * b[t - 1, j] + κ_b[j] * s[j][t])
     @constraint(model, [t = 2:T, j in idx_params], RWS[t, j] == RWS[t - 1, j] + b[t - 1, j] + κ_RWS[j] * s[j][t])
     @constraint(model, [j in idx_params], κ_min ≤ κ_RWS[j] ≤ κ_max)
     @constraint(model, [j in idx_params], κ_min ≤ κ_b[j] ≤ κ_max)
+    @constraint(model, [j in idx_params], 0.0 ≤ Φ[j]  <= 0.999)
 end
 
 """
@@ -378,6 +399,46 @@ function add_level!(model::Ml, s::Vector{Fl}, T::Int64, level::Vector{String};
     end
 end
 
+function add_HS_seasonality!(model::Ml, s::Vector{Fl}, T::Int64, seasonality::Vector{String};
+    κ_min::Union{Float64, Int64} = 1e-5, κ_max::Union{Float64, Int64} = 2) where {Ml, Fl}
+
+    seasonal_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
+    idx_params = sort(findall(i -> i != false, seasonal_dict))
+    seasonal_periods = seasonal_dict[idx_params[1]]
+    println("seasonal_periods: ", seasonal_periods)
+    println("idx_params: ", idx_params)
+    S_aux = Matrix(undef, T, length(seasonality))
+
+    @variable(model, k_S[idx_params])
+
+    @constraint(model, [i in idx_params], κ_min ≤ k_S[i] ≤ κ_max)
+
+    @variable(model, γ_sto[1:seasonal_periods, 1:T, idx_params])
+
+    println("gets here")
+
+    month = 1
+    for t in 2:T
+        for j in 1:seasonal_periods
+            if(j == month)
+                @constraint(model, [j = j, t = t, p in idx_params], γ_sto[j, t, p] == γ_sto[j, t-1, p] + k_S[p] * s[p][t])
+            else
+                @constraint(model, [j = j, t = t, p in idx_params], γ_sto[j, t, p] == γ_sto[j, t-1, p] + (k_S[p]/(seasonal_periods - 1))* s[p][t])
+            end
+        end
+        month = month < 12 ? month + 1 : 1
+    end
+
+    for t in 1:T
+        for j in idx_params
+            month = mod(t, seasonal_periods) == 0 ? seasonal_periods : mod(t, seasonal_periods)
+            S_aux[t, j] = γ_sto[month, t, j]
+        end
+    end
+
+    @expression(model, S[t=1:T, j in idx_params], S_aux[t, j])
+end
+
 """
 # get_num_harmonic_and_seasonal_period(seasonality::Union{Dict{Int64, Int64}, Dict{Int64, Bool}})
 
@@ -408,6 +469,59 @@ function get_num_harmonic_and_seasonal_period(seasonality::Dict{Int64, Union{Boo
     end
     
     return num_harmonic, seasonal_period
+end
+
+function get_num_harmonic_and_seasonal_period(seasonality::Dict{Int64, Union{Bool, Int64}})
+
+    num_params = length(seasonality)
+
+    seasonal_period = Vector{Union{Int64, Nothing}}()
+    num_harmonic    = Vector{Union{Int64, Nothing}}()
+
+    for i in 1:num_params
+        if typeof(seasonality[i]) == Int64
+            push!(seasonal_period, seasonality[i])
+            push!(num_harmonic, Int64(floor(seasonal_period[i] / 2)))
+        else
+            push!(seasonal_period, nothing)
+            push!(num_harmonic, nothing)
+        end
+    end
+    
+    return num_harmonic, seasonal_period
+end
+
+function get_HS_seasonal_period(seasonality::Dict{Int64, Union{Bool, Int64}})
+
+    num_params = length(seasonality)
+
+    seasonal_period = Vector{Union{Int64, Nothing}}()
+
+    for i in 1:num_params
+        if typeof(seasonality[i]) == Int64
+            push!(seasonal_period, seasonality[i])
+        else
+            push!(seasonal_period, nothing)
+        end
+    end
+    
+    return seasonal_period
+end
+
+function add_seasonality!(model::Ml, s::Vector{Fl}, T::Int64, seasonality::Vector{String};
+    κ_min::Union{Float64, Int64} = 1e-5, κ_max::Union{Float64, Int64} = 2) where {Ml, Fl}
+
+    for i in 1:length(seasonality)
+        if !isempty(seasonality[i])
+            seasonality_type = split(seasonality[i])[1]
+            if seasonality_type in ["HS", "Harrison Stevens", "Harrison & Stevens", "Harrison and Stevens"]
+                add_HS_seasonality!(model, s, T, seasonality; κ_min = κ_min, κ_max = κ_max)
+            else
+                add_trigonometric_seasonality!(model, s, T, seasonality; κ_min = κ_min, κ_max = κ_max)
+            end
+        end
+    end
+
 end
 
 """
@@ -508,7 +622,7 @@ function include_components!(model::Ml, s::Vector{Fl}, gas_model::GASModel, T::I
     end
 
     if has_seasonality(seasonality)
-        add_trigonometric_seasonality!(model, s, T, seasonality; κ_min = κ_min, κ_max = κ_max)
+        add_seasonality!(model, s, T, seasonality; κ_min = κ_min, κ_max = κ_max)
     end
 end
 

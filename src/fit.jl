@@ -34,7 +34,7 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, fixed_ν::Union{Missin
     # @unpack dist, time_varying_params, d, random_walk, random_walk_slope, ar, seasonality, robust, stochastic = gas_model
     @unpack dist, time_varying_params, d, level, seasonality, ar = gas_model
 
-    dist_code = get_dist_code(dist)
+    dist_code = 4
     dist_name = DICT_CODE[dist_code]
     
     T = length(y)
@@ -52,7 +52,10 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, fixed_ν::Union{Missin
 
     # #@info("Computing score...")
     s = compute_score(model, parameters, y, d, time_varying_params, T, dist);
-    
+    open("example.txt", "w") do file
+        i = s  # Example value
+        println(file, "score: ", i)
+    end
     # #@info("Including components...")
     include_components!(model, s, gas_model, T; κ_min = κ_min, κ_max = κ_max);
 
@@ -60,6 +63,10 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, fixed_ν::Union{Missin
     if ismissing(initial_values)
         Random.seed!(123)
         initial_values = create_output_initialization(y, missing, gas_model);
+
+        open("init.txt", "w") do file
+            println(file, "init vals: ", initial_values)
+        end
     end
 
     # #@info("Including dynamics..")
@@ -130,11 +137,12 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, X::Matrix{Fl}, fixed_�
     set_optimizer_attribute(model, "tol", tol)
     set_silent(model)
 
-    #@info("Including parameters...")
+    @info("Including parameters...")
     parameters = include_parameters(model, time_varying_params, T, dist, fixed_ν);
 
-    #@info("Computing score...")
+    @info("Computing score...")
     s = compute_score(model, parameters,  y, d, time_varying_params, T, dist);
+    @info("s: ", s)
     
     #@info("Including components...")
     include_components!(model, s, gas_model, T; κ_min = κ_min, κ_max = κ_max);
@@ -143,6 +151,7 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, X::Matrix{Fl}, fixed_�
     if ismissing(initial_values)
         Random.seed!(123)
         initial_values = create_output_initialization(y, X, gas_model)
+        
     end
 
     #@info("Including explanatory variables...")
@@ -410,7 +419,8 @@ function create_output_fit(model::Ml, parameters::Matrix{Gl} ,y::Vector{Fl}, X::
 
     information_criteria = get_information_criteria(model, parameters, y, dist)
 
-    fit_in_sample, fitted_params, components = get_fitted_values(gas_model, model,  X)
+    fit_in_sample, fitted_params, components, fixed_params = get_fitted_values(gas_model, model,  X)
+    components["param_fixed"] = fixed_params
 
     if typeof(dist) == LogNormalDistribution
         fit_in_sample, fitted_params = convert_to_exp_scale(fit_in_sample, fitted_params)

@@ -1,28 +1,33 @@
 abstract type ScoreDrivenDistribution end
 
-"""
-# GASModel
+include("distributions/gamma.jl")
+include("distributions/gamma_log_link.jl")
+include("distributions/normal.jl")
+include("distributions/log_normal.jl")
 
-A mutable struct representing a Generalized Autoregressive Score (GAS) model.
+# """
+# # GASModel
 
-## Fields
-- `dist::ScoreDrivenDistribution`: The score-driven distribution used in the GAS model.
-- `time_varying_params::Vector{Bool}`: A vector indicating which parameters are time-varying.
-- `d::Union{Int64, Float64, Missing}`: The degree of freedom parameter. It can be an integer, float, or missing.
-- `level::Union{String, Vector{String}}`: A string or a vector of strings indicating the level dynamics for each parameter. It can include "random walk", "random walk slope", "ar(1)", or be empty.
-- `seasonality::Union{String, Vector{String}}`: A string or a vector of strings indicating the seasonality dynamics for each parameter. It includes the type and seasonal period, such as "deterministic 12", or can be empty.
-- `ar::Union{Int64, Vector{Int64}, Vector{Missing}, Vector{Union{Int64, Missing}}, Missing, Vector{Vector{Int64}}, Vector{Union{Missing, Vector{Int64}}}}`: A vector indicating the autoregressive (AR) components included for each parameter. It can contain integers, missing values, or vectors of integers, or be missing.
+# A mutable struct representing a Generalized Autoregressive Score (GAS) model.
 
-## Constructor
-- `GASModel(dist::ScoreDrivenDistribution, time_varying_params::Vector{Bool}, d::Union{Int64, Float64, Missing}, level::Union{String, Vector{String}}, seasonality::Union{String, Vector{String}}, ar::Union{Int64, Vector{Int64}, Vector{Missing}, Vector{Union{Int64, Missing}}, Missing, Vector{Vector{Int64}}, Vector{Union{Missing, Vector{Int64}}}})`: Constructs a new `GASModel` object with the specified parameters.
+# ## Fields
+# - `dist::ScoreDrivenDistribution`: The score-driven distribution used in the GAS model.
+# - `time_varying_params::Vector{Bool}`: A vector indicating which parameters are time-varying.
+# - `d::Union{Int64, Float64, Missing}`: The degree of freedom parameter. It can be an integer, float, or missing.
+# - `level::Union{String, Vector{String}}`: A string or a vector of strings indicating the level dynamics for each parameter. It can include "random walk", "random walk slope", "ar(1)", or be empty.
+# - `seasonality::Union{String, Vector{String}}`: A string or a vector of strings indicating the seasonality dynamics for each parameter. It includes the type and seasonal period, such as "deterministic 12", or can be empty.
+# - `ar::Union{Int64, Vector{Int64}, Vector{Missing}, Vector{Union{Int64, Missing}}, Missing, Vector{Vector{Int64}}, Vector{Union{Missing, Vector{Int64}}}}`: A vector indicating the autoregressive (AR) components included for each parameter. It can contain integers, missing values, or vectors of integers, or be missing.
 
-## Description
-This struct represents a GAS model, which is a statistical model used for time series forecasting. It contains information about the distribution used, whether parameters are time-varying, the scale parameter, the level dynamics, seasonality dynamics, and autoregressive components for each parameter.
+# ## Constructor
+# - `GASModel(dist::ScoreDrivenDistribution, time_varying_params::Vector{Bool}, d::Union{Int64, Float64, Missing}, level::Union{String, Vector{String}}, seasonality::Union{String, Vector{String}}, ar::Union{Int64, Vector{Int64}, Vector{Missing}, Vector{Union{Int64, Missing}}, Missing, Vector{Vector{Int64}}, Vector{Union{Missing, Vector{Int64}}}})`: Constructs a new `GASModel` object with the specified parameters.
 
-The `level` field indicates the dynamics of the level component, such as random walk, random walk slope, or AR(1), for each parameter. The `seasonality` field includes the type and seasonal period, such as "deterministic 12", for each parameter. The `ar` field indicates the autoregressive components for each parameter.
+# ## Description
+# This struct represents a GAS model, which is a statistical model used for time series forecasting. It contains information about the distribution used, whether parameters are time-varying, the scale parameter, the level dynamics, seasonality dynamics, and autoregressive components for each parameter.
 
-The constructor `GASModel` initializes a new GAS model with the provided parameters, ensuring the validity of the input values.
-"""
+# The `level` field indicates the dynamics of the level component, such as random walk, random walk slope, or AR(1), for each parameter. The `seasonality` field includes the type and seasonal period, such as "deterministic 12", for each parameter. The `ar` field indicates the autoregressive components for each parameter.
+
+# The constructor `GASModel` initializes a new GAS model with the provided parameters, ensuring the validity of the input values.
+# """
 mutable struct GASModel
     dist::ScoreDrivenDistribution
     time_varying_params::Vector{Bool}
@@ -65,7 +70,7 @@ mutable struct GASModel
         end
 
         @assert all([level[i] ∈ ["random walk", "random walk slope", "ar(1)", ""] for i in 1:num_params]) "Invalid level dynamic!"
-        @assert all([split(seasonality[i], " ")[1] ∈ ["deterministic", "stochastic", ""] for i in 1:num_params]) "Invalid seasonality dynamic!"
+        @assert all([split(seasonality[i], " ")[1] ∈ ["deterministic", "stochastic", "HS", "Harrison Stevens", "Harrison & Stevens", "Harrison and Stevens", ""] for i in 1:num_params]) "Invalid seasonality dynamic!"
 
         idx_fixed_params = findall(x -> x == false, time_varying_params)
         

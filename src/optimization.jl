@@ -214,7 +214,7 @@ function include_objective_function!(model::Ml, parameters::Matrix{Gl}, y::Vecto
         elseif num_params == 2
             @operator(model, log_pdf, 3, DICT_LOGPDF[dist_name])
             #register(model, :log_pdf, 3, DICT_LOGPDF[dist_name]; autodiff = true)
-            @objective(model, Min, (1 - α) * (-sum(log_pdf(parameters[t, 1], parameters[t, 2], y[t]) for t in 2:T)) + α * sum(κ_variables[i]^2 for i in eachindex(κ_variables)))
+            @objective(model, Min, (-sum(log_pdf(parameters[t, 1], parameters[t, 2], y[t]) for t in 2:T)))
         end    
     end
 end

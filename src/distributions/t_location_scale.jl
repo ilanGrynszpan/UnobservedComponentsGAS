@@ -1,3 +1,5 @@
+include("../structures.jl")
+
 """
 mutable struct tLocationScaleDistribution
 

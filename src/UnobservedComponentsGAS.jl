@@ -16,7 +16,7 @@ module UnobservedComponentsGAS
     using StatsBase
     using ARCHModels
      
-    # include("../NonParametricStructuralModels/src/NonParametricStructuralModels.jl")
+    # # include("../NonParametricStructuralModels/src/NonParametricStructuralModels.jl")
 
     include("structures.jl")
     include("distributions/common.jl")
@@ -24,6 +24,7 @@ module UnobservedComponentsGAS
     include("distributions/t_location_scale.jl")
     include("distributions/log_normal.jl")
     include("distributions/gamma.jl")
+    include("distributions/gamma_log_link.jl")
     include("initialization.jl")
     include("fit.jl")
     include("utils.jl")
@@ -34,21 +35,26 @@ module UnobservedComponentsGAS
 
     const DICT_CODE = Dict(1 => "Normal",
                            2 => "tLocationScale",
-                           3 => "Gamma")
+                           3 => "Gamma",
+                           4 => "GammaLogLink")
 
     const DICT_SCORE = Dict("Normal"         => score_normal,
                             "tLocationScale" => score_tlocationscale,
-                            "Gamma"          => score_gamma)
+                            "Gamma"          => score_gamma,
+                            "GammaLogLink"   => score_gamma_log_link)
 
     const DICT_FISHER_INFORMATION = Dict("Normal"         => fisher_information_normal,
                                          "tLocationScale" => fisher_information_tlocationscale,
-                                         "Gamma"          => fisher_information_gamma)
+                                         "Gamma"          => fisher_information_gamma,
+                                         "GammaLogLink"   => fisher_information_gamma_log_link)
 
     const DICT_LOGPDF = Dict("Normal"         => logpdf_normal,
                              "tLocationScale" => logpdf_tlocationscale,
-                             "Gamma"          => logpdf_gamma)
+                             "Gamma"          => logpdf_gamma,
+                             "GammaLogLink"   => logpdf_gamma_log_link)
 
     const DICT_CDF = Dict("Normal"         => cdf_normal,
                           "tLocationScale" => cdf_tlocationscale,
-                          "Gamma"          => cdf_gamma)
+                          "Gamma"          => cdf_gamma,
+                          "GammaLogLink"   => cdf_gamma_log_link)
 end 

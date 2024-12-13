@@ -21,11 +21,19 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
     num_params = get_num_params(dist)
     components = output.components
 
-    seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
-    idx_params_deterministic = idx_params[.!stochastic_params[idx_params]]
-    idx_params_stochastic    = idx_params[stochastic_params[idx_params]]
-    
-    num_harmonic, seasonal_period = get_num_harmonic_and_seasonal_period(seasonality_dict)
+    has_HS_seas = has_HS_seasonality(seasonality)
+
+    if !has_HS_seasonality(seasonality)
+        seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
+        idx_params_deterministic = idx_params[.!stochastic_params[idx_params]]
+        idx_params_stochastic    = idx_params[stochastic_params[idx_params]]
+        num_harmonic, seasonal_period = get_num_harmonic_and_seasonal_period(seasonality_dict)
+    else 
+        seasonality_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
+        stochastic_params = idx_params
+        num_harmonic = []
+        seasonal_period = seasonality_dict[idx_params[1]]
+    end
 
     if isempty(num_harmonic) #caso não tenha sazonalidade, assume 1 harmonico para nao quebrar a função update_S!
         num_harmonic = Int64.(ones(get_num_params(dist)))
@@ -61,8 +69,8 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
 
     dict_hyperparams_and_fitted_components["seasonality"]["value"]   = zeros(num_params, T_fitted + steps_ahead, num_scenarios)
     dict_hyperparams_and_fitted_components["seasonality"]["κ"]       = zeros(num_params)
-
-    if has_seasonality(seasonality) 
+println("has HS: ", has_HS_seasonality(seasonality))
+    if has_seasonality(seasonality) && !has_HS_seasonality(seasonality)
         #if stochastic
             dict_hyperparams_and_fitted_components["seasonality"]["γ"]       = zeros(num_harmonic[idx_params[1]], T_fitted + steps_ahead, num_params, num_scenarios) 
             dict_hyperparams_and_fitted_components["seasonality"]["γ_star"]  = zeros(num_harmonic[idx_params[1]], T_fitted + steps_ahead, num_params, num_scenarios)
@@ -70,6 +78,8 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
          #   dict_hyperparams_and_fitted_components["seasonality"]["γ"]       = zeros(num_harmonic[idx_params[1]], num_params) 
         #    dict_hyperparams_and_fitted_components["seasonality"]["γ_star"]  = zeros(num_harmonic[idx_params[1]], num_params)
         #end
+    elseif has_HS_seasonality(seasonality)
+        dict_hyperparams_and_fitted_components["seasonality"]["γ"]       = zeros(seasonal_period, T_fitted + steps_ahead, num_params, num_scenarios)
     end
 
     dict_hyperparams_and_fitted_components["ar"]["value"] = zeros(num_params, T_fitted + steps_ahead, num_scenarios)
@@ -79,6 +89,8 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
     else
         dict_hyperparams_and_fitted_components["ar"]["ϕ"] = zeros(num_params)
     end
+
+    println("num params : ", num_params)
 
     for i in 1:num_params
         dict_hyperparams_and_fitted_components["params"][i, 1:T_fitted, :] .= output.fitted_params["param_$i"]
@@ -112,7 +124,7 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
             dict_hyperparams_and_fitted_components["ar"]["κ"][i]                     = components["param_$i"]["ar"]["hyperparameters"]["κ"]
         end 
 
-        if has_seasonality(seasonality, i)
+        if has_seasonality(seasonality, i) && !has_HS_seasonality(seasonality, i)
             dict_hyperparams_and_fitted_components["seasonality"]["value"][i, 1:T_fitted, :]    .= components["param_$i"]["seasonality"]["value"]
             # dict_hyperparams_and_fitted_components["seasonality"]["κ"][i]                        = components["param_$i"]["seasonality"]["hyperparameters"]["κ"]
             if i ∈ idx_params_stochastic
@@ -126,6 +138,17 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
                 dict_hyperparams_and_fitted_components["seasonality"]["γ_star"][:, :, i, :] .= components["param_$i"]["seasonality"]["hyperparameters"]["γ_star"]
             end
 
+        end
+
+        if has_HS_seasonality(seasonality, i)
+            println("1 : ", length(dict_hyperparams_and_fitted_components["seasonality"]["γ"]))
+            println("dims: ", size(components["param_$i"]["seasonality"]["hyperparameters"]["γ"]))
+            println("dims2: ", size(dict_hyperparams_and_fitted_components["seasonality"]["γ"]))
+            println("2 : ", length(components["param_$i"]["seasonality"]["hyperparameters"]["γ"]))
+            println("param : ", i)
+            dict_hyperparams_and_fitted_components["seasonality"]["value"][i, 1:T_fitted, :]    .= components["param_$i"]["seasonality"]["value"]
+            dict_hyperparams_and_fitted_components["seasonality"]["κ"][i]                        = components["param_$i"]["seasonality"]["hyperparameters"]["κ"]
+            dict_hyperparams_and_fitted_components["seasonality"]["γ"][:, 1:T_fitted, i, :]     .= components["param_$i"]["seasonality"]["hyperparameters"]["γ"]
         end
     end
 
@@ -278,7 +301,6 @@ Updates the seasonality component predictions for the specified parameter, time 
 """
 function update_S!(dict_hyperparams_and_fitted_components::Dict{String, Any}, num_harmonic::Vector{Union{Nothing, Int64}}, diff_T::Int64, param::Int64, stochastic::Bool, t::Int64, s::Int64)
 
-
     if stochastic
         for j in 1:num_harmonic[param]
             dict_hyperparams_and_fitted_components["seasonality"]["γ"][j, t, param, s] = dict_hyperparams_and_fitted_components["seasonality"]["γ"][j, t-1, param, s]*cos(2 * π * j /(num_harmonic[param] * 2)) +
@@ -295,6 +317,19 @@ function update_S!(dict_hyperparams_and_fitted_components::Dict{String, Any}, nu
         dict_hyperparams_and_fitted_components["seasonality"]["value"][param, t, s] = sum(dict_hyperparams_and_fitted_components["seasonality"]["γ"][j, t, param, s]*cos(2 * π * j * (diff_T + t)/(num_harmonic[param] * 2)) +
                                                                             dict_hyperparams_and_fitted_components["seasonality"]["γ_star"][j, t, param, s]*sin(2 * π * j * (diff_T + t)/(num_harmonic[param] * 2)) for j in 1:num_harmonic[param])
     end
+end
+
+function update_S_HS!(dict_hyperparams_and_fitted_components::Dict{String, Any}, seasonal_period::Vector{Union{Nothing, Int64}}, diff_T::Int64, param::Int64, t::Int64, s::Int64, month::Int64)
+    for ω in 1:seasonal_period[param]
+        if ω == month
+            dict_hyperparams_and_fitted_components["seasonality"]["γ"][ω, t, param, s] = dict_hyperparams_and_fitted_components["seasonality"]["γ"][ω, t-1, param, s] 
+                                                                                            + dict_hyperparams_and_fitted_components["seasonality"]["κ"][param] * dict_hyperparams_and_fitted_components["score"][param, t, s]
+        else
+            dict_hyperparams_and_fitted_components["seasonality"]["γ"][ω, t, param, s] = dict_hyperparams_and_fitted_components["seasonality"]["γ"][ω, t-1, param, s] 
+                                                                                            + (dict_hyperparams_and_fitted_components["seasonality"]["κ"][param] / (seasonal_period[param] - 1)) * dict_hyperparams_and_fitted_components["score"][param, t, s]
+        end
+    end
+    dict_hyperparams_and_fitted_components["seasonality"]["value"][param, t, s] = dict_hyperparams_and_fitted_components["seasonality"]["γ"][month, t-1, param, s] 
 end
 
 """
@@ -394,8 +429,18 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
 
     idx_params                   = get_idxs_time_varying_params(time_varying_params) 
     order                        = get_AR_order(ar)
-    seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
-    num_harmonic, _              = get_num_harmonic_and_seasonal_period(seasonality_dict)
+
+    if !has_HS_seasonality(seasonality)
+        seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
+        num_harmonic, _              = get_num_harmonic_and_seasonal_period(seasonality_dict)
+        seasonal_period = []
+    else
+        seasonality_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
+        stochastic_params = idx_params
+        num_harmonic = []
+        seasonal_period = Union{Nothing, Int64}[seasonality_dict[idx_params[i]] for i in 1:length(idx_params)]
+    end
+
     dist_code                    = get_dist_code(dist)
  
     T        = length(y)
@@ -416,6 +461,9 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
     pred_y = zeros(T_fitted + steps_ahead, num_scenarios)
     pred_y[1:T_fitted, :] .= y[first_idx:end]
 
+    println("param1 - seas: ", has_HS_seasonality(seasonality, 1), has_seasonality(seasonality, 1))
+    println("param2 - seas: ", has_HS_seasonality(seasonality, 2) , has_seasonality(seasonality, 2))
+
     Random.seed!(123)
     for t in 1:steps_ahead
         for s in 1:num_scenarios
@@ -430,8 +478,12 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
                 if has_ar1_level(level, i)
                     update_AR1_level!(dict_hyperparams_and_fitted_components, i, T_fitted + t, s)
                 end
-                if has_seasonality(seasonality, i)
+                if has_seasonality(seasonality, i) && !has_HS_seasonality(seasonality, i)
                     update_S!(dict_hyperparams_and_fitted_components, num_harmonic, T - T_fitted, i, stochastic_params[i], T_fitted + t, s)
+                end
+                if has_HS_seasonality(seasonality, i)
+                    month = mod(T_fitted + t, seasonal_period[i]) == 0 ? seasonal_period[i] : mod(T_fitted + t, seasonal_period[i])
+                    update_S_HS!(dict_hyperparams_and_fitted_components, seasonal_period, T - T_fitted, i, T_fitted + t, s, month)
                 end
                 if has_AR(ar, i)
                     update_AR!(dict_hyperparams_and_fitted_components, order, i, T_fitted + t, s)
@@ -542,8 +594,9 @@ function simulate(gas_model::GASModel, output::Output, y::Vector{Float64}, steps
     end
 
     dict_hyperparams_and_fitted_components = get_dict_hyperparams_and_fitted_components_with_forecast(gas_model, new_output, steps_ahead, num_scenarios)
+    println("debug 0")
     simulated_scenarios                    = simulate(gas_model, new_output, dict_hyperparams_and_fitted_components, y, steps_ahead, num_scenarios)
-    
+    println("debug 1")
     if typeof(gas_model.dist) == LogNormalDistribution
         simulated_scenarios = convert_forecast_scenarios_to_exp_scale(simulated_scenarios)
     end
@@ -578,7 +631,9 @@ function simulate(gas_model::GASModel, output::Output, y::Vector{Float64}, X_for
     end
 
     dict_hyperparams_and_fitted_components = get_dict_hyperparams_and_fitted_components_with_forecast(gas_model, new_output, X_forecast, steps_ahead, num_scenarios)
+    println("debug 0")
     simulated_scenarios                    = simulate(gas_model, new_output, dict_hyperparams_and_fitted_components, y, X_forecast, steps_ahead, num_scenarios)
+    println("debug 1")
     
     if typeof(gas_model.dist) == LogNormalDistribution
         simulated_scenarios = convert_forecast_scenarios_to_exp_scale(simulated_scenarios)
@@ -636,6 +691,14 @@ function get_mean_and_intervals_prediction(pred_y::Matrix{Fl}, steps_ahead::Int6
     return dict_forec
 end
 
+function plot_forecast(x_range, dict_forec)
+    plot!(x_range, dict_forec["mean"], label = "Mean")
+    for q in keys(dict_forec["intervals"])
+        plot!(x_range, dict_forec["intervals"][q]["upper"], label = "Upper $q")
+        plot!(x_range, dict_forec["intervals"][q]["lower"], label = "Lower $q")
+    end
+end
+
 """
 # predict(gas_model::GASModel, output::Output, y::Vector{Float64}, steps_ahead::Int64, num_scenarios::Int64; probabilistic_intervals::Vector{Float64} = [0.8, 0.95])
 
@@ -657,7 +720,7 @@ Predicts future values of a time series using the specified GAS model.
     - `upper`: A vector containing the interval's upper bound for each time step.
     - `lower`: A vector containing the interval's  lower bound for each time step.
 """
-function predict(gas_model::GASModel, output::Output, y::Vector{Float64}, steps_ahead::Int64, num_scenarios::Int64; probabilistic_intervals::Vector{Float64} = [0.8, 0.95])
+function predict(gas_model::GASModel, output::Output, y::Vector{Float64}, steps_ahead::Int64, num_scenarios::Int64, probabilistic_intervals::Vector{Float64} = [0.95])
     
     simulated_scenarios = simulate(gas_model, output, y, steps_ahead, num_scenarios)
     

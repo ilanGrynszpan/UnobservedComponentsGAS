@@ -30,8 +30,20 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
     
     @unpack dist, time_varying_params, d, level, seasonality, ar = gas_model
 
+    is_seasonal_HS = false
+    for i in 1:length(seasonality)
+        if !isempty(seasonality[i]) && split(seasonality[i], " ")[1] == "HS"
+            is_seasonal_HS = true
+        end
+    end
+
     idx_params                                      = get_idxs_time_varying_params(time_varying_params)
-    seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
+    
+    if is_seasonal_HS
+        seasonality_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
+    else
+        seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
+    end
 
     # Getting Fit in sample
     if 1 ∈ idx_params
@@ -50,6 +62,8 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
             fitted_params["param_$i"] = ones(length(fit_in_sample)) * value(model[:fixed_params][i])
         end
     end
+
+    fixed_params = value.(model[:fixed_params])
     
     components = Dict{String, Any}()
 
@@ -88,8 +102,8 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
             components["param_$i"]["slope"]["hyperparameters"]["κ"] = value(model[:κ_b][i])
         end
 
-        if has_seasonality(seasonality, i)
-            #seasonality_dict, stochastic = get_seasonality_dict_and_stochastic(seasonality)
+        if has_seasonality(seasonality, i) && !has_HS_seasonality(seasonality, i)
+            seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
             components["param_$i"]["seasonality"]                    = Dict{String, Any}()
             components["param_$i"]["seasonality"]["hyperparameters"] = Dict{String, Any}()
 
@@ -103,6 +117,16 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
                 components["param_$i"]["seasonality"]["hyperparameters"]["γ_star"] = Vector(value.(model[:γ_star_det][:, i]))
             end
 
+        end
+
+        if has_HS_seasonality(seasonality, i)
+            seasonality_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
+            components["param_$i"]["seasonality"]                    = Dict{String, Any}()
+            components["param_$i"]["seasonality"]["hyperparameters"] = Dict{String, Any}()
+
+            components["param_$i"]["seasonality"]["value"]                     = Vector(value.(model[:S][:, i]))
+            components["param_$i"]["seasonality"]["hyperparameters"]["γ"]      = Matrix(value.(model[:γ_sto][:,:, i]))
+            components["param_$i"]["seasonality"]["hyperparameters"]["κ"]      = value(model[:k_S][i])
         end
 
         if has_AR(ar, i)
@@ -120,7 +144,7 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
 
     end
 
-    return fit_in_sample, fitted_params, components
+    return fit_in_sample, fitted_params, components, fixed_params
 
 end
 
@@ -485,6 +509,35 @@ function fit_harmonics(y::Vector{Fl}, seasonal_period::Int64, stochastic::Bool) 
     
 end
 
+function fit_HS(y::Vector{Fl}, seasonal_period::Int64) where {Fl}
+    T = length(y)
+
+    if seasonal_period % 2 == 0
+        num_harmonic = Int64(seasonal_period / 2)
+    else
+        num_harmonic = Int64((seasonal_period -1) / 2)
+    end
+
+    model = JuMP.Model(Ipopt.Optimizer)
+    #set_silent(model)
+    set_optimizer_attribute(model, "print_level", 0)
+    #set_optimizer_attribute(model, "hessian_constant", "yes")
+
+    @variable(model, y_hat[1:T])
+
+    @variable(model, γ[1:num_harmonic])
+    @variable(model, γ_star[1:num_harmonic])
+
+    @constraint(model, [t = 1:T], y_hat[t] == sum(γ[i] * cos(2 * π * i * t/seasonal_period) + 
+                                                  γ_star[i] * sin(2 * π * i* t/seasonal_period)  for i in 1:num_harmonic))
+   
+    @objective(model, Min, sum((y .- y_hat).^2))
+    optimize!(model)
+
+    return value.(γ), value.(y_hat)
+end
+
+
 """
 ## get_seasonality_dict_and_stochastic(seasonality::Vector{String})
 
@@ -514,6 +567,21 @@ function get_seasonality_dict_and_stochastic(seasonality::Vector{String})
     end
     
     return seasonality_dict, any(stochastic), stochastic
+end
+
+function get_seasonality_dict_and_stochastic_HS(seasonality::Vector{String})
+    seasonality_dict = Dict{Int64, Union{Int64, Bool}}()
+    
+    for i in 1:length(seasonality)
+        if isempty(seasonality[i])
+            seasonality_dict[i] = false
+        else  
+            _, seasonal_periods = split(seasonality[i])
+            seasonality_dict[i] = parse(Int64, seasonal_periods)
+        end
+    end
+    
+    return seasonality_dict
 end
 
 function get_in_sample_statistics(output::Output, y::Vector{Fl}) where Fl

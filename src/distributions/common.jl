@@ -79,9 +79,9 @@ function scaled_score(first_param, second_param, third_param, y, d, dist_code, w
     elseif d == 0.5
         FI = DICT_FISHER_INFORMATION[dist_name](first_param, second_param, third_param)
         try
-            s = cholesky(inv(FI), check = false).UL' * ∇
+            s = cholesky(inv(FI), check = false).L' * ∇
         catch
-            s = cholesky(pinv(FI), check = false).UL' * ∇
+            s = cholesky(pinv(FI), check = false).L' * ∇
         end
 
 
