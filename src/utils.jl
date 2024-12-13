@@ -46,7 +46,9 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
     end
 
     # Getting Fit in sample
-    if 1 ∈ idx_params
+    if 1 ∈ idx_params && typeof(gas_model.dist) == GammaDistributionLogLink
+        fit_in_sample = Vector(value.(model[:params][:, 1]))
+    elseif 1 ∈ idx_params
         fit_in_sample = Vector(value.(model[:params][:, 1]))
     else
         fit_in_sample = ones(size(model[:params], 1)) * value(model[:fixed_params][1])
@@ -56,7 +58,9 @@ function get_fitted_values(gas_model::GASModel, model::Ml, X::Union{Missing, Mat
     # Getting fitted parameters
     fitted_params = Dict{String, Vector{Float64}}()
     for i in eachindex(time_varying_params)
-        if time_varying_params[i]
+        if time_varying_params[i] && typeof(gas_model.dist) == GammaDistributionLogLink
+            fitted_params["param_$i"] = value.(model[:params][:, i])
+        elseif time_varying_params[i]
             fitted_params["param_$i"] = value.(model[:params][:, i])
         else
             fitted_params["param_$i"] = ones(length(fit_in_sample)) * value(model[:fixed_params][i])

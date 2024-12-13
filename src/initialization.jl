@@ -45,7 +45,7 @@ function define_state_space_model(y::Vector{Float64}, has_level::Bool, has_slope
     initial_slope       = zeros(T)
     initial_seasonality = zeros(T)
     initial_γ           = zeros(1)
-    #initial_γ_star      = zeros(1)
+    initial_γ_star      = zeros(1)
 
     if has_seasonality
         if !has_level && !has_slope
@@ -53,8 +53,7 @@ function define_state_space_model(y::Vector{Float64}, has_level::Bool, has_slope
             StateSpaceModels.fit!(ss_model)
             initial_seasonality = ss_model.y .- vcat(zeros(seasonal_period), ss_model.residuals)
             res = ss_model.residuals
-            #initial_γ, initial_γ_star = fit_harmonics(initial_seasonality, seasonal_period, stochastic)
-            initial_γ = fit_HS(y, seasonal_period)[2][1:seasonal_period]
+            initial_γ, initial_γ_star = fit_harmonics(initial_seasonality, seasonal_period, stochastic)
         else
             #Basic structural
             ss_model                  = BasicStructural(y, seasonal_period)
@@ -62,8 +61,7 @@ function define_state_space_model(y::Vector{Float64}, has_level::Bool, has_slope
             for t in 1:T
                 initial_seasonality[t] = -sum(pred_state[t+1, end-(seasonal_period-2):end])
             end
-            #initial_γ, initial_γ_star = fit_harmonics(initial_seasonality, seasonal_period, stochastic)
-            initial_γ = fit_harmonics(y, seasonal_period, true)
+            initial_γ, initial_γ_star = fit_harmonics(initial_seasonality, seasonal_period, stochastic)
 
             if has_level && has_slope
                 initial_level = pred_state[2:end,1]
@@ -92,11 +90,9 @@ function define_state_space_model(y::Vector{Float64}, has_level::Bool, has_slope
     if length(res) < T
         res = vcat(rand(res, T - length(res)), res)
     end
-
-    println("seas: ", initial_seasonality)
     
     return Dict("level" => initial_level,"slope" => initial_slope,"seasonality" => initial_seasonality,
-            "γ" => initial_γ,"explanatory" => missing,"res" => res)
+            "γ" => initial_γ,"γ_star" => initial_γ_star,"explanatory" => missing,"res" => res)
 end
 
 """
@@ -216,12 +212,10 @@ function get_initial_values(y::Vector{Float64}, X::Union{Matrix{Float64}, Missin
     if has_level || has_slope || has_seasonality || has_ar1_level
 
         if has_explanatories
-            ss_components = define_state_space_model(y, X, (has_level || has_ar1_level), has_slope, has_seasonality, seasonal_period, true)
+            ss_components = define_state_space_model(y, X, (has_level || has_ar1_level), has_slope, has_seasonality, seasonal_period, stochastic)
         else
-            ss_components = define_state_space_model(y, (has_level || has_ar1_level), has_slope, has_seasonality, seasonal_period, true)
+            ss_components = define_state_space_model(y, (has_level || has_ar1_level), has_slope, has_seasonality, seasonal_period, stochastic)
         end
-
-        println(ss_components["γ"])
 
         if !isnothing(order[1])
             res = ss_components["res"]
@@ -274,11 +268,11 @@ function get_initial_values(y::Vector{Float64}, X::Union{Matrix{Float64}, Missin
     if has_seasonality
         initial_seasonality = ss_components["seasonality"]
         initial_γ           = ss_components["γ"]
-        #initial_γ_star      = ss_components["γ_star"]
+        initial_γ_star      = ss_components["γ_star"]
     else
         initial_seasonality = zeros(length(y))
         initial_γ           = zeros(1)
-        #initial_γ_star      = zeros(1)
+        initial_γ_star      = zeros(1)
     end
 
     selected_explanatories = missing
@@ -302,7 +296,7 @@ function get_initial_values(y::Vector{Float64}, X::Union{Matrix{Float64}, Missin
     initial_values["seasonality"]           = Dict()
     initial_values["seasonality"]["values"] = initial_seasonality
     initial_values["seasonality"]["γ"]      = initial_γ
-    # initial_values["seasonality"]["γ_star"] = initial_γ_star
+    initial_values["seasonality"]["γ_star"] = initial_γ_star
     initial_values["seasonality"]["κ"]      = 0.02
     initial_values["ar"]                    = Dict()
     initial_values["ar"]["values"]          = initial_ar
@@ -634,7 +628,23 @@ function initialize_components!(model::Ml, initial_values::Dict{String, Any}, ga
         set_start_value.(model[:κ_RW][cols], round.(initial_values["rw"]["κ"]; digits = 5))
     end
 
-    if has_seasonality(seasonality, 1)
+    if has_seasonality(seasonality, 1) && !has_HS_seasonality(seasonality, 1)
+        cols = 1
+        seasonality_dict, stochastic, stochastic_params = get_seasonality_dict_and_stochastic(seasonality)
+        # Próximas linhas para inicializar apenas os kappas que forem de params com sazo estocástica
+        idx_params = sort(findall(i -> i != false, seasonality_dict))        
+        idx_params_stochastic = idx_params[findall(stochastic_params .!= false)]
+        if stochastic_params[1]
+            set_start_value.(model[:κ_S][idx_params_stochastic], round.(initial_values["seasonality"]["κ"]; digits = 5))
+            set_start_value.(model[:γ_sto][:, :, cols], round.(initial_values["seasonality"]["γ"]; digits = 5))
+            set_start_value.(model[:γ_star_sto][:, :, cols], round.(initial_values["seasonality"]["γ_star"]; digits = 5))
+        else
+            set_start_value.(model[:γ_det][:, cols], round.(initial_values["seasonality"]["γ"]; digits = 5))
+            set_start_value.(model[:γ_star_det][:, cols], round.(initial_values["seasonality"]["γ_star"]; digits = 5)) 
+        end
+    end
+
+    if has_HS_seasonality(seasonality, 1)
 
         cols = 1
         seasonality_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
@@ -642,11 +652,20 @@ function initialize_components!(model::Ml, initial_values::Dict{String, Any}, ga
         idx_params = sort(findall(i -> i != false, seasonality_dict))        
         
         set_start_value.(model[:k_S][idx_params], round.(initial_values["seasonality"]["κ"]))
-        set_start_value.(model[:γ_sto][:, :, cols], [0.1, -0.1, 0.1, -0.1, 0.1, -0.1, 0.1, -0.1, 0.1, -0.1, 0.1, -0.1])#, initial_values["seasonality"]["values"][1:12])
+        set_start_value.(
+            model[:γ_sto][:, :, cols], 
+            vcat(round.(initial_values["seasonality"]["values"][1:11]; 
+                digits = 5
+            ), -sum(
+                round.(initial_values["seasonality"]["values"][1:11]; digits = 5)
+                )
+            ) 
+        )#, initial_values["seasonality"]["values"][1:12])
         # if haskey(initial_values["seasonality"], "γ")
         #     set_start_value.(model[:γ][:, :, cols], round.(initial_values["seasonality"]["γ"]; digits = 5))
         #     set_start_value.(model[:γ_star][:, :, cols], round.(initial_values["seasonality"]["γ_star"]; digits = 5))        
         # end
+    
     end
 
     if has_AR(ar, 1)

@@ -30,12 +30,12 @@ y_train = orig_data[1:tam - 12]
 y_test = orig_data[(tam - 11):tam]
 y_all = orig_data
 
-dist = Main.UnobservedComponentsGAS.GammaDistribution()
+dist = Main.UnobservedComponentsGAS.GammaDistribution()  #.GammaDistributionLogLink()
 
 time_varying_params = [true, false];
 d                   = 0.0;
 level               = ["random walk slope", ""];
-seasonality         = ["HS 12", ""];
+seasonality         = ["stochastic 12", ""];
 ar                  = Vector{Union{Missing}}([missing, missing])
 #sample_robustness   = 1;
 
@@ -59,12 +59,14 @@ fitted_modeld0_train.components["param_1"]["level"]["value"]
 # predicting test set
 
 steps_ahead    = 12;
-num_scenarious = 500;
+num_scenarious = 1;
 
 fitted_modeld0_test = UnobservedComponentsGAS.predict(modeld0, fitted_modeld0_train, y_train , steps_ahead, num_scenarious, [0.95])
 fitted_modeld05_test = UnobservedComponentsGAS.predict(modeld05, fitted_modeld05_train, y_train , steps_ahead, num_scenarious, [0.95])
 fitted_modeld1_test = UnobservedComponentsGAS.predict(modeld1, fitted_modeld1_train, y_train , steps_ahead, num_scenarious, [0.95])
 
+
+fitted_modeld0_test[2]["params"][1, 539:550, 1]
 
 # fitting models to full sample
 
@@ -88,20 +90,27 @@ end
 
 println(length(y_train), " ", length(y_test), " ", length(y_train)+length(y_test))
 
-upper_95_model0 = fitted_modeld0_test["intervals"]["95"]["upper"]
-lower_95_model0 = fitted_modeld0_test["intervals"]["95"]["lower"]
-mean_model0 = fitted_modeld0_test["mean"]
+upper_95_model0 = fitted_modeld0_test[1]["intervals"]["95"]["upper"]
+lower_95_model0 = fitted_modeld0_test[1]["intervals"]["95"]["lower"]
+mean_model0 = fitted_modeld0_test[1]["mean"]
 plot_model(y_train[2:end], fitted_modeld0_train.fit_in_sample[2:end], y_test, mean_model0, upper_95_model0, lower_95_model0)
 savefig("modeld0_train_test.png")
 
 plot(y_train)
-plot!(fitted_modeld1_train.fit_in_sample)
+plot!(539:550, y_test)
+plot!(539:550, fitted_modeld1_test[1])
 
-fitted_modeld1_train.components["param_1"]["seasonality"]["value"][1:15]
+exp(2000)
+
+plot!(fitted_modeld0_train.fitted_params["param_1"])
+
+exp.(fitted_modeld0_train.fitted_params["param_1"])
+
+fitted_modeld1_train.components["param_1"]["seasonality"]["value"][100:115]
 
 plot(y_train)
-plot!(fitted_modeld0_train.fit_in_sample)
-fitted_modeld1_train.components["param_1"]["seasonality"]["value"][10:20]
+plot!(fitted_modeld1_train.fit_in_sample)
+r = fitted_modeld1_train.components["param_1"]["seasonality"]["value"][1:12]
 y_train[1:5]
 
 plot(y_train)
@@ -125,7 +134,7 @@ upper_95_model1 = fitted_modeld1_test["intervals"]["95"]["upper"]
 lower_95_model1 = fitted_modeld1_test["intervals"]["95"]["lower"]
 mean_model1 = fitted_modeld1_test["mean"]
 plot_model(y_train, fitted_modeld1_train.fit_in_sample, y_test, mean_model1, upper_95_model1, lower_95_model1)
-savefig("modeld1_train_test.png")
+savefig("modeld1_train_test111.png")
 
 
 plot(y_train)

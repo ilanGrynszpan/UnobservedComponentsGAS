@@ -461,14 +461,12 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
     pred_y = zeros(T_fitted + steps_ahead, num_scenarios)
     pred_y[1:T_fitted, :] .= y[first_idx:end]
 
-    println("param1 - seas: ", has_HS_seasonality(seasonality, 1), has_seasonality(seasonality, 1))
-    println("param2 - seas: ", has_HS_seasonality(seasonality, 2) , has_seasonality(seasonality, 2))
-
     Random.seed!(123)
     for t in 1:steps_ahead
         for s in 1:num_scenarios
             for i in idx_params
                 update_score!(dict_hyperparams_and_fitted_components, pred_y, d, dist_code, i, T_fitted + t, s)
+                println("score> ", dict_hyperparams_and_fitted_components["score"])
                 if has_random_walk(level, i)
                     update_rw!(dict_hyperparams_and_fitted_components, i, T_fitted + t, s)
                 end
@@ -494,7 +492,7 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
         end
     end
 
-    return pred_y
+    return pred_y, dict_hyperparams_and_fitted_components
 end
 
 """
@@ -594,14 +592,12 @@ function simulate(gas_model::GASModel, output::Output, y::Vector{Float64}, steps
     end
 
     dict_hyperparams_and_fitted_components = get_dict_hyperparams_and_fitted_components_with_forecast(gas_model, new_output, steps_ahead, num_scenarios)
-    println("debug 0")
     simulated_scenarios                    = simulate(gas_model, new_output, dict_hyperparams_and_fitted_components, y, steps_ahead, num_scenarios)
-    println("debug 1")
     if typeof(gas_model.dist) == LogNormalDistribution
         simulated_scenarios = convert_forecast_scenarios_to_exp_scale(simulated_scenarios)
     end
 
-   return simulated_scenarios[end-steps_ahead+1:end, :]
+   return simulated_scenarios[1][end-steps_ahead+1:end, :], simulated_scenarios[2]
 end
 
 """
@@ -631,9 +627,7 @@ function simulate(gas_model::GASModel, output::Output, y::Vector{Float64}, X_for
     end
 
     dict_hyperparams_and_fitted_components = get_dict_hyperparams_and_fitted_components_with_forecast(gas_model, new_output, X_forecast, steps_ahead, num_scenarios)
-    println("debug 0")
     simulated_scenarios                    = simulate(gas_model, new_output, dict_hyperparams_and_fitted_components, y, X_forecast, steps_ahead, num_scenarios)
-    println("debug 1")
     
     if typeof(gas_model.dist) == LogNormalDistribution
         simulated_scenarios = convert_forecast_scenarios_to_exp_scale(simulated_scenarios)
@@ -724,9 +718,9 @@ function predict(gas_model::GASModel, output::Output, y::Vector{Float64}, steps_
     
     simulated_scenarios = simulate(gas_model, output, y, steps_ahead, num_scenarios)
     
-    dict_forec = get_mean_and_intervals_prediction(simulated_scenarios, steps_ahead, probabilistic_intervals)
+    #dict_forec = get_mean_and_intervals_prediction(simulated_scenarios[1], steps_ahead, probabilistic_intervals)
 
-    return dict_forec
+    return simulated_scenarios#dict_forec, simulated_scenarios
 end
 
 """

@@ -405,8 +405,6 @@ function add_HS_seasonality!(model::Ml, s::Vector{Fl}, T::Int64, seasonality::Ve
     seasonal_dict = get_seasonality_dict_and_stochastic_HS(seasonality)
     idx_params = sort(findall(i -> i != false, seasonal_dict))
     seasonal_periods = seasonal_dict[idx_params[1]]
-    println("seasonal_periods: ", seasonal_periods)
-    println("idx_params: ", idx_params)
     S_aux = Matrix(undef, T, length(seasonality))
 
     @variable(model, k_S[idx_params])
@@ -415,15 +413,13 @@ function add_HS_seasonality!(model::Ml, s::Vector{Fl}, T::Int64, seasonality::Ve
 
     @variable(model, γ_sto[1:seasonal_periods, 1:T, idx_params])
 
-    println("gets here")
-
     month = 1
     for t in 2:T
         for j in 1:seasonal_periods
             if(j == month)
                 @constraint(model, [j = j, t = t, p in idx_params], γ_sto[j, t, p] == γ_sto[j, t-1, p] + k_S[p] * s[p][t])
             else
-                @constraint(model, [j = j, t = t, p in idx_params], γ_sto[j, t, p] == γ_sto[j, t-1, p] + (k_S[p]/(seasonal_periods - 1))* s[p][t])
+                @constraint(model, [j = j, t = t, p in idx_params], γ_sto[j, t, p] == γ_sto[j, t-1, p] - (k_S[p]/(seasonal_periods - 1))* s[p][t])
             end
         end
         month = month < 12 ? month + 1 : 1

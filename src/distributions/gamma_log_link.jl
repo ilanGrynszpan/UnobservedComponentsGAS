@@ -42,10 +42,10 @@ function score_gamma_log_link(λ, α, y)
   
     α <= 0 ? α = 1e-2 : nothing
     
-    eλ = isinf(exp(λ)) ? 1e6 : exp(λ) 
+    eλ_frac = isinf(exp(λ)) ? 0.0 : (y/exp(λ)) 
 
-    ∇_α =  log(y) - y/exp(λ) + log(α) - Ψ1(α) - λ + 1
-    ∇_λ = α * ((y/eλ) - 1)
+    ∇_α =  log(y) - eλ_frac + log(α) - Ψ1(α) - λ + 1
+    ∇_λ = α * (eλ_frac - 1)
 
     return [∇_λ; ∇_α]
 end
@@ -70,7 +70,7 @@ Evaluate the log pdf of a Normal distribution with mean μ and variance σ², in
 "
 function logpdf_gamma_log_link(λ, α, y)
 
-    return logpdf_gamma_log_link([exp(λ), α], y)
+    return logpdf_gamma_log_link([λ, α], y)
 end
 
 "
@@ -81,12 +81,11 @@ Evaluate the log pdf of a Normal distribution with mean μ and variance σ², in
 function logpdf_gamma_log_link(param, y)
 
     param[2] > 0 ? α = param[2] : α = 1e-2
-    param[1] > 0 ? λ = param[1] : λ = 1e-2
+    λ = param[1]
 
-    actual_λ = isinf(exp(λ)) ? 1e6 : exp(λ)
-    member = α/actual_λ < 1e-4 ? 1e-4 : α/actual_λ
+    member = isinf(exp(λ)) ? 0.0 : α/(exp(λ))
    
-    return -log(Γ(α)) - α*log(α) + α*λ + α*log(y) - log(y) - member*y 
+    return -log(Γ(α)) + α*log(α) + α*λ + α*log(y) - log(y) - member*y 
 end
 
 "
@@ -126,11 +125,13 @@ function sample_dist(param::Vector{Float64}, dist::GammaDistributionLogLink)
     "A Gamma do pacote Distributions é parametrizada com shape α e scale θ"
     "Como θ = 1/β e β = α/λ, segue-se que θ = λ/α"
     param[2] > 0 ? α = param[2] : α = 1e-2
-    param[1] > 0 ? λ = param[1] : λ = 1e-2
+    λ = param[1]
+
+    l = λ > 0 ? λ : 1e-2
 
     eλ = isinf(exp(λ)) ? 1e6 : exp(λ)
     
-    return rand(Distributions.Gamma(α, eλ/α))
+    return rand(Distributions.Gamma(α, l/α))
 end
 
 "
