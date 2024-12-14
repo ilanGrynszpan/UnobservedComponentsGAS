@@ -169,13 +169,10 @@ function get_initial_params(y::Vector{Fl}, time_varying_params::Vector{Bool}, di
     seasonal_period = get_num_harmonic_and_seasonal_period(seasonality)[2]
 
     initial_params = Dict()
-    fitted_distribution = fit_mle(Gamma, y)
     
     # param[2] = λ = média
     if time_varying_params[1]
-        initial_params[1] = y
-    else
-        initial_params[1] = fitted_distribution.α*fitted_distribution.θ
+        initial_params[1] = log.(y)
     end
 
     # param[1] = α

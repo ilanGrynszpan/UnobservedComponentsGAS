@@ -8,8 +8,8 @@ using Distributions, LinearAlgebra, Random, Optim, JuMP, ForwardDiff, SpecialFun
 #     include("src/distributions/normal.jl")
 #     include("src/distributions/t_location_scale.jl")
 #     include("src/distributions/log_normal.jl")
-     include("src/distributions/gamma.jl")
-#     include("src/distributions/gamma_log_link.jl")
+#     include("src/distributions/gamma.jl")
+     include("src/distributions/gamma_log_link.jl")
 #     include("src/initialization.jl")
 #     include("src/fit.jl")
 #     include("src/utils.jl")
@@ -35,7 +35,7 @@ dist = Main.UnobservedComponentsGAS.GammaDistributionLogLink()  #.GammaDistribut
 time_varying_params = [true, false];
 d                   = 0.0;
 level               = ["random walk slope", ""];
-seasonality         = ["stochastic 12", ""];
+seasonality         = ["HS 12", ""];
 ar                  = Vector{Union{Missing}}([missing, missing])
 #sample_robustness   = 1;
 
@@ -100,9 +100,11 @@ plot(y_train)
 plot!(539:550, y_test)
 plot!(539:550, fitted_modeld0_test[1])
 
+fitted_modeld0_train.components["param_1"]["level"]["value"]
+
 exp(2000)
 
-plot!(fitted_modeld0_train.fitted_params["param_1"])
+plot!(fitted_modeld1_train.fitted_params["param_1"])
 
 exp.(fitted_modeld0_train.fitted_params["param_1"])
 
@@ -159,9 +161,23 @@ plot!(fitted_modeld1.fit_in_sample)
 
 savefig("C:/Users/ilang/OneDrive/Documentos/Ilan/academia/2024.2/SDM/trabalho/HS_NE.png")
 
-α = 0.8052321435188204
-v1 = α^2 * (trigamma(α) - (1/α))
-v2 = α
 
-v2^(-0.5)
+vals_level = 0#fitted_modeld05.components["param_1"]["level"]["value"][1]
+vals_base = 0#fitted_modeld05.components["param_1"]["slope"]["value"][1]
+val_k_level = fitted_modeld05.components["param_1"]["level"]["hyperparameters"]["κ"]
+val_k_b = fitted_modeld05.components["param_1"]["slope"]["hyperparameters"]["κ"]
 
+init_λ = init_vals_level
+
+λ = []
+
+for t in 1:100
+     push!(λ, vals_level)
+     typeof(y_train[t]), typeof(λ[t])
+     vals_base = vals_base + val_k_b * score_gamma_log_link(λ[t], 1, y_train[t])[1]
+     vals_level = vals_level + vals_base + val_k_level * score_gamma_log_link(λ[t], 1, y_train[t])[1]
+end
+
+println(λ)
+
+score_gamma_log_link(λ[40], 1, y_train[40])[1]
