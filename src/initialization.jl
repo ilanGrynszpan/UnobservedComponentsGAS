@@ -653,13 +653,13 @@ function initialize_components!(model::Ml, initial_values::Dict{String, Any}, ga
         
         set_start_value.(model[:k_S][idx_params], round.(initial_values["seasonality"]["κ"]))
         set_start_value.(
-            model[:γ_sto][:, :, cols], 
-            vcat(round.(initial_values["seasonality"]["values"][1:11]; 
-                digits = 5
-            ), -sum(
-                round.(initial_values["seasonality"]["values"][1:11]; digits = 5)
-                )
-            ) 
+            model[:γ_sto][:, :, cols], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            # vcat(round.(initial_values["seasonality"]["values"][1:11]; 
+            #     digits = 5
+            # ), -sum(
+            #     round.(initial_values["seasonality"]["values"][1:11]; digits = 5)
+            #     )
+            # ) 
         )#, initial_values["seasonality"]["values"][1:12])
         # if haskey(initial_values["seasonality"], "γ")
         #     set_start_value.(model[:γ][:, :, cols], round.(initial_values["seasonality"]["γ"]; digits = 5))

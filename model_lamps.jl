@@ -30,7 +30,7 @@ y_train = orig_data[1:tam - 12]
 y_test = orig_data[(tam - 11):tam]
 y_all = orig_data
 
-dist = Main.UnobservedComponentsGAS.GammaDistribution()  #.GammaDistributionLogLink()
+dist = Main.UnobservedComponentsGAS.GammaDistributionLogLink()  #.GammaDistributionLogLink()
 
 time_varying_params = [true, false];
 d                   = 0.0;
@@ -98,7 +98,7 @@ savefig("modeld0_train_test.png")
 
 plot(y_train)
 plot!(539:550, y_test)
-plot!(539:550, fitted_modeld1_test[1])
+plot!(539:550, fitted_modeld0_test[1])
 
 exp(2000)
 
@@ -106,12 +106,10 @@ plot!(fitted_modeld0_train.fitted_params["param_1"])
 
 exp.(fitted_modeld0_train.fitted_params["param_1"])
 
-fitted_modeld1_train.components["param_1"]["seasonality"]["value"][100:115]
+sum(fitted_modeld1_train.components["param_1"]["seasonality"]["value"][1:12])
 
 plot(y_train)
-plot!(fitted_modeld1_train.fit_in_sample)
-r = fitted_modeld1_train.components["param_1"]["seasonality"]["value"][1:12]
-y_train[1:5]
+plot!(fitted_modeld0_train.fit_in_sample)
 
 plot(y_train)
 upper_95_model05 = fitted_modeld05_test["intervals"]["95"]["upper"]

@@ -425,6 +425,8 @@ function add_HS_seasonality!(model::Ml, s::Vector{Fl}, T::Int64, seasonality::Ve
         month = month < 12 ? month + 1 : 1
     end
 
+    @constraint(model, [t = 1, p in idx_params], sum(γ_sto[j, t, p] for j in 1:seasonal_periods) == 0)
+
     for t in 1:T
         for j in idx_params
             month = mod(t, seasonal_periods) == 0 ? seasonal_periods : mod(t, seasonal_periods)

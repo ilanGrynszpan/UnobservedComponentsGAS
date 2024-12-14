@@ -69,7 +69,7 @@ function get_dict_hyperparams_and_fitted_components_with_forecast(gas_model::GAS
 
     dict_hyperparams_and_fitted_components["seasonality"]["value"]   = zeros(num_params, T_fitted + steps_ahead, num_scenarios)
     dict_hyperparams_and_fitted_components["seasonality"]["κ"]       = zeros(num_params)
-println("has HS: ", has_HS_seasonality(seasonality))
+
     if has_seasonality(seasonality) && !has_HS_seasonality(seasonality)
         #if stochastic
             dict_hyperparams_and_fitted_components["seasonality"]["γ"]       = zeros(num_harmonic[idx_params[1]], T_fitted + steps_ahead, num_params, num_scenarios) 
@@ -90,7 +90,6 @@ println("has HS: ", has_HS_seasonality(seasonality))
         dict_hyperparams_and_fitted_components["ar"]["ϕ"] = zeros(num_params)
     end
 
-    println("num params : ", num_params)
 
     for i in 1:num_params
         dict_hyperparams_and_fitted_components["params"][i, 1:T_fitted, :] .= output.fitted_params["param_$i"]
@@ -141,11 +140,6 @@ println("has HS: ", has_HS_seasonality(seasonality))
         end
 
         if has_HS_seasonality(seasonality, i)
-            println("1 : ", length(dict_hyperparams_and_fitted_components["seasonality"]["γ"]))
-            println("dims: ", size(components["param_$i"]["seasonality"]["hyperparameters"]["γ"]))
-            println("dims2: ", size(dict_hyperparams_and_fitted_components["seasonality"]["γ"]))
-            println("2 : ", length(components["param_$i"]["seasonality"]["hyperparameters"]["γ"]))
-            println("param : ", i)
             dict_hyperparams_and_fitted_components["seasonality"]["value"][i, 1:T_fitted, :]    .= components["param_$i"]["seasonality"]["value"]
             dict_hyperparams_and_fitted_components["seasonality"]["κ"][i]                        = components["param_$i"]["seasonality"]["hyperparameters"]["κ"]
             dict_hyperparams_and_fitted_components["seasonality"]["γ"][:, 1:T_fitted, i, :]     .= components["param_$i"]["seasonality"]["hyperparameters"]["γ"]
@@ -466,7 +460,6 @@ function simulate(gas_model::GASModel, output::Output, dict_hyperparams_and_fitt
         for s in 1:num_scenarios
             for i in idx_params
                 update_score!(dict_hyperparams_and_fitted_components, pred_y, d, dist_code, i, T_fitted + t, s)
-                println("score> ", dict_hyperparams_and_fitted_components["score"])
                 if has_random_walk(level, i)
                     update_rw!(dict_hyperparams_and_fitted_components, i, T_fitted + t, s)
                 end

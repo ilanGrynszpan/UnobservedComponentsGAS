@@ -52,10 +52,6 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, fixed_ν::Union{Missin
 
     # #@info("Computing score...")
     s = compute_score(model, parameters, y, d, time_varying_params, T, dist);
-    open("example.txt", "w") do file
-        i = s  # Example value
-        println(file, "score: ", i)
-    end
     # #@info("Including components...")
     include_components!(model, s, gas_model, T; κ_min = κ_min, κ_max = κ_max);
 
@@ -63,10 +59,6 @@ function create_model(gas_model::GASModel, y::Vector{Fl}, fixed_ν::Union{Missin
     if ismissing(initial_values)
         Random.seed!(123)
         initial_values = create_output_initialization(y, missing, gas_model);
-
-        open("init.txt", "w") do file
-            println(file, "init vals: ", initial_values)
-        end
     end
 
     # #@info("Including dynamics..")
